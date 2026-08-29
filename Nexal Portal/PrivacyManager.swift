@@ -16,10 +16,20 @@ class PrivacyManager: ObservableObject {
 }
 
 // MARK: - Helper extensions
+private let currencyFormatter: NumberFormatter = {
+    let f = NumberFormatter()
+    f.numberStyle = .currency
+    f.currencyCode = "USD"
+    f.locale = Locale(identifier: "en_US")
+    f.maximumFractionDigits = 2
+    f.minimumFractionDigits = 2
+    return f
+}()
+
 extension Double {
-    /// Returns formatted currency string, or "••••••" if privacy mode is on
+    /// Returns formatted currency string with commas, or "••••••" if privacy mode is on
     func redacted(_ privacy: Bool) -> String {
-        privacy ? "••••••" : String(format: "$%.2f", self)
+        privacy ? "••••••" : (currencyFormatter.string(from: NSNumber(value: self)) ?? String(format: "$%.2f", self))
     }
 }
 

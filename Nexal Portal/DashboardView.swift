@@ -19,6 +19,19 @@ struct DashboardView: View {
                         .padding()
                 } else {
                     VStack(spacing: 20) {
+                        // Year label
+                        HStack {
+                            Text("Tax Year")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Text(String(taxYear))
+                                .font(.caption).fontWeight(.bold)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Color.blue.opacity(0.12))
+                                .foregroundStyle(.blue)
+                                .clipShape(Capsule())
+                            Spacer()
+                        }
+
                         // Summary cards
                         if let s = summary {
                             summaryCards(s)
@@ -81,14 +94,16 @@ struct DashboardView: View {
                 .cornerRadius(4)
             }
             .frame(height: 200)
-            .chartLegend(position: .bottom, alignment: .center)
+            .chartLegend(.hidden)
 
             // Legend list with amounts
-            ForEach(totals) { item in
-                HStack {
-                    Text(item.name ?? "Unknown").font(.caption).lineLimit(1)
-                    Spacer()
-                    Text(item.total.redacted(privacy.isPrivate)).font(.caption).bold()
+            VStack(spacing: 6) {
+                ForEach(totals) { item in
+                    HStack {
+                        Text(item.name ?? "Unknown").font(.caption).lineLimit(1)
+                        Spacer()
+                        Text(item.total.redacted(privacy.isPrivate)).font(.caption).bold()
+                    }
                 }
             }
         }

@@ -29,8 +29,9 @@ struct ReportsView: View {
                             }
                             Spacer()
                             VStack(alignment: .trailing) {
-                                Text("Transactions").font(.caption).foregroundStyle(.secondary)
-                                Text("\(transactionCount)").font(.title).bold()
+                                Text("Tax Year").font(.caption).foregroundStyle(.secondary)
+                                Text(String(taxYear))
+                                    .font(.title).bold().foregroundStyle(.blue)
                             }
                         }
                         .padding()

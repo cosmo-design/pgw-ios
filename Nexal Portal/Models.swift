@@ -84,8 +84,8 @@ struct DashboardSummary: Codable {
         case categoryCount = "category_count"
         case accountCount = "account_count"
         case reviewedCount = "reviewed_count"
-        case averageConfidence = "average_confidence"
-        case statusCounts = "status_counts"
+        case averageConfidence = "avg_confidence"
+        case statusCounts = "processing_status"
     }
 }
 
@@ -219,6 +219,11 @@ struct ClientNote: Codable, Identifiable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+}
+
+struct NotesResponse: Codable {
+    let client: String
+    let notes: [ClientNote]
 }
 
 struct NoteCreateRequest: Codable {

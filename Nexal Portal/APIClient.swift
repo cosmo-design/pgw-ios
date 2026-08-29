@@ -117,9 +117,10 @@ class APIClient {
 
     // MARK: - Notes
     func getNotes(client: String = "PGW") async throws -> [ClientNote] {
-        let url = try url("/api/notes", query: ["client": client])
+        let url = try url("/api/notes", query: ["client": client, "include_done": "true"])
         let (data, _) = try await session.data(from: url)
-        return try decode(data)
+        let response: NotesResponse = try decode(data)
+        return response.notes
     }
 
     func createNote(title: String, body: String?, priority: String, client: String = "PGW") async throws -> ClientNote {

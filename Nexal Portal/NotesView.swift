@@ -50,7 +50,7 @@ struct NotesView: View {
                     }
                 }
             }
-            .navigationTitle("Notes & Tasks")
+            .navigationTitle("To-Do List")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showAdd = true } label: { Image(systemName: "plus") }

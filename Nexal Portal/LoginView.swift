@@ -13,17 +13,43 @@ struct LoginView: View {
             Color(.systemGroupedBackground).ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header
-                VStack(spacing: 8) {
-                    Image(systemName: "doc.text.viewfinder")
-                        .font(.system(size: 56))
-                        .foregroundStyle(.blue)
-                        .padding(.bottom, 4)
-                    Text("Nexus Analytics LLC")
-                        .font(.largeTitle).bold()
-                    Text("Client Portal")
-                        .font(.subheadline)
+                // Header — Nexus Analytics logo
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 1.5)
+                            .frame(width: 72, height: 72)
+                        Circle().fill(Color.blue).frame(width: 16, height: 16)
+                        // top node
+                        Circle().fill(Color(red: 0.30, green: 0.43, blue: 0.98)).frame(width: 10, height: 10)
+                            .offset(y: -28)
+                        // bottom-right node
+                        Circle().fill(Color(red: 0.30, green: 0.43, blue: 0.98)).frame(width: 10, height: 10)
+                            .offset(x: 24, y: 14)
+                        // bottom-left node
+                        Circle().fill(Color(red: 0.30, green: 0.43, blue: 0.98)).frame(width: 10, height: 10)
+                            .offset(x: -24, y: 14)
+                        // lines drawn as thin rectangles rotated
+                        Rectangle().fill(Color.blue).frame(width: 1.5, height: 20)
+                            .offset(y: -18)
+                        Rectangle().fill(Color.blue).frame(width: 1.5, height: 20)
+                            .rotationEffect(.degrees(60))
+                            .offset(x: 12, y: 6)
+                        Rectangle().fill(Color.blue).frame(width: 1.5, height: 20)
+                            .rotationEffect(.degrees(-60))
+                            .offset(x: -12, y: 6)
+                    }
+                    .frame(width: 80, height: 80)
+                    .padding(.bottom, 4)
+
+                    HStack(spacing: 0) {
+                        Text("NEXUS ").font(.system(size: 26, weight: .heavy)).foregroundStyle(Color(red: 0.06, green: 0.11, blue: 0.30))
+                        Text("ANALYTICS").font(.system(size: 26, weight: .heavy)).foregroundStyle(.blue)
+                    }
+                    Text("LLC · CLIENT PORTAL")
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
+                        .kerning(2)
                 }
                 .padding(.top, 80)
                 .padding(.bottom, 48)
