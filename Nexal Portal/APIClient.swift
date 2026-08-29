@@ -108,6 +108,15 @@ class APIClient {
         try await updateTransaction(txnId, payload: ["reviewed": reviewed])
     }
 
+    func getReceiptImage(txnId: Int) async throws -> Data {
+        let url = try url("/api/review/image/\(txnId)")
+        let (data, resp) = try await session.data(from: url)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+            throw APIError.serverError("Image not available")
+        }
+        return data
+    }
+
     func getReviewOptions() async throws -> ReviewOptions {
         let url = try url("/api/review/options")
         let (data, _) = try await session.data(from: url)
@@ -115,6 +124,23 @@ class APIClient {
     }
 
     // MARK: - Reports
+    func shareReport(toEmail: String, taxYear: Int, isPrivate: Bool) async throws {
+        let url = try url("/api/reports/share")
+        var req = post(url)
+        req.httpBody = try JSONEncoder().encode([
+            "to_email": toEmail,
+            "tax_year": "\(taxYear)",
+            "redact": isPrivate ? "true" : "false"
+        ])
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw APIError.serverError("No response") }
+        if http.statusCode != 200 { throw serverError(data, fallback: "Share failed") }
+        if let dict = try? JSONDecoder().decode([String: AnyCodable].self, from: data),
+           let success = dict["success"]?.value as? Bool, !success {
+            throw APIError.serverError(dict["detail"]?.value as? String ?? "Email not configured")
+        }
+    }
+
     func getTaxReport(taxYear: Int = 2026) async throws -> TaxReport {
         let url = try url("/api/reports/tax-summary", query: ["tax_year": "\(taxYear)"])
         let (data, _) = try await session.data(from: url)
@@ -150,6 +176,21 @@ class APIClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONEncoder().encode(NoteUpdateRequest(title: title, body: body, done: done, priority: priority))
         _ = try await session.data(for: req)
+    }
+
+    func shareNotes(toEmail: String, client: String = "PGW") async throws {
+        let url = try url("/api/notes/share")
+        var req = post(url)
+        req.httpBody = try JSONEncoder().encode(["to_email": toEmail, "client": client])
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw APIError.serverError("No response") }
+        if http.statusCode != 200 { throw serverError(data, fallback: "Share failed") }
+        // If SMTP not configured, backend returns success:false with text content
+        if let dict = try? JSONDecoder().decode([String: AnyCodable].self, from: data),
+           let success = dict["success"]?.value as? Bool, !success {
+            let detail = dict["detail"]?.value as? String ?? "Email not configured"
+            throw APIError.serverError(detail)
+        }
     }
 
     func deleteNote(_ id: Int) async throws {

@@ -1,5 +1,6 @@
 import Network
 import SwiftUI
+import Combine
 
 class NetworkMonitor: ObservableObject {
     static let shared = NetworkMonitor()

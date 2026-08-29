@@ -9,6 +9,13 @@ struct ReportsView: View {
     @State private var error = ""
     @State private var taxYear = 2026
 
+    // Share
+    @State private var showShareSheet = false
+    @State private var showEmailDialog = false
+    @State private var emailAddress = ""
+    @State private var emailResult = ""
+    @State private var shareItems: [Any] = []
+
     var grandTotal: Double { taxReport?.grandTotal ?? 0 }
     var transactionCount: Int { (taxReport?.accounts.reduce(0) { $0 + $1.count }) ?? 0 }
 
@@ -70,12 +77,45 @@ struct ReportsView: View {
                             Image(systemName: "printer")
                         }
                         .disabled(taxReport == nil && propertyReport == nil)
+
+                        Menu {
+                            Button {
+                                shareItems = [buildShareText()]
+                                showShareSheet = true
+                            } label: {
+                                Label("Share via…", systemImage: "square.and.arrow.up")
+                            }
+                            Button {
+                                emailAddress = ""
+                                emailResult = ""
+                                showEmailDialog = true
+                            } label: {
+                                Label("Email to…", systemImage: "envelope")
+                            }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .disabled(taxReport == nil && propertyReport == nil)
+
                         PrivacyBadge()
                     }
                 }
             }
             .task { await load() }
             .refreshable { await load() }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: shareItems)
+            }
+            .alert("Email Report", isPresented: $showEmailDialog) {
+                TextField("Email address", text: $emailAddress)
+                    .keyboardType(.emailAddress)
+                    .autocapitalization(.none)
+                Button("Send") { Task { await sendEmail() } }
+                    .disabled(emailAddress.isEmpty)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(emailResult.isEmpty ? "Enter the recipient's email address." : emailResult)
+            }
         }
     }
 
@@ -160,5 +200,44 @@ struct ReportsView: View {
             propertyReport = try await prop
         } catch {}
         isLoading = false
+    }
+
+    func buildShareText() -> String {
+        let fmt: (Double) -> String = { v in
+            privacy.isPrivate ? "••••••" :
+            (NumberFormatter.currency.string(from: NSNumber(value: v)) ?? String(format: "$%.2f", v))
+        }
+        var text = "Nexus Analytics — Expense Report\n"
+        text += "Tax Year \(taxYear)\n"
+        text += String(repeating: "─", count: 36) + "\n\n"
+        if let t = taxReport {
+            text += "TOTAL EXPENSES: \(fmt(t.grandTotal))\n\n"
+            text += "BY EXPENSE ACCOUNT\n"
+            for a in t.accounts {
+                let acct = a.account ?? "Unknown"
+                text += "  \(acct): \(fmt(a.total)) (\(a.count) txns)\n"
+            }
+        }
+        if let p = propertyReport, !p.properties.isEmpty {
+            text += "\nBY BUSINESS / PROPERTY\n"
+            for b in p.properties {
+                text += "  \(b.business ?? "Unknown"): \(fmt(b.total)) (\(b.count) txns)\n"
+            }
+        }
+        text += "\nNexus Analytics LLC"
+        return text
+    }
+
+    func sendEmail() async {
+        do {
+            try await APIClient.shared.shareReport(
+                toEmail: emailAddress,
+                taxYear: taxYear,
+                isPrivate: privacy.isPrivate
+            )
+            emailResult = "Sent to \(emailAddress)"
+        } catch {
+            emailResult = error.localizedDescription
+        }
     }
 }

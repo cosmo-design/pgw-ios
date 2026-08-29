@@ -118,8 +118,8 @@ struct ReviewItem: Codable, Identifiable {
     let reviewed: Bool?
     let notes: String?
     let fileName: String?
+    let fileType: String?
     let dropboxPath: String?
-    let receiptId: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -133,8 +133,8 @@ struct ReviewItem: Codable, Identifiable {
         case reviewed
         case notes
         case fileName = "file_name"
+        case fileType = "file_type"
         case dropboxPath = "dropbox_path"
-        case receiptId = "receipt_id"
     }
 }
 

@@ -9,6 +9,14 @@ struct NotesView: View {
     @State private var newBody = ""
     @State private var newPriority = "normal"
 
+    // Share
+    @State private var showShareSheet = false
+    @State private var showEmailDialog = false
+    @State private var emailAddress = ""
+    @State private var isSendingEmail = false
+    @State private var emailResult = ""
+    @State private var shareItems: [Any] = []
+
     var pendingNotes: [ClientNote] { notes.filter { !$0.done }.sorted { priorityOrder($0) < priorityOrder($1) } }
     var doneNotes: [ClientNote] { notes.filter { $0.done } }
 
@@ -60,9 +68,44 @@ struct NotesView: View {
                             Image(systemName: "printer")
                         }
                         .disabled(notes.isEmpty)
+
+                        Menu {
+                            Button {
+                                shareItems = [buildShareText()]
+                                showShareSheet = true
+                            } label: {
+                                Label("Share via…", systemImage: "square.and.arrow.up")
+                            }
+                            Button {
+                                emailAddress = ""
+                                emailResult = ""
+                                showEmailDialog = true
+                            } label: {
+                                Label("Email to…", systemImage: "envelope")
+                            }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .disabled(notes.isEmpty)
+
                         Button { showAdd = true } label: { Image(systemName: "plus") }
                     }
                 }
+            }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: shareItems)
+            }
+            .alert("Email To-Do List", isPresented: $showEmailDialog) {
+                TextField("Email address", text: $emailAddress)
+                    .keyboardType(.emailAddress)
+                    .autocapitalization(.none)
+                Button("Send") {
+                    Task { await sendEmail() }
+                }
+                .disabled(emailAddress.isEmpty)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(emailResult.isEmpty ? "Enter the recipient's email address." : emailResult)
             }
             .task { await load() }
             .refreshable { await load() }
@@ -137,6 +180,44 @@ struct NotesView: View {
     func priorityOrder(_ note: ClientNote) -> Int {
         switch note.priority { case "high": return 0; case "normal": return 1; default: return 2 }
     }
+
+    func buildShareText() -> String {
+        var text = "To-Do List — Nexus Analytics\n"
+        text += String(repeating: "-", count: 34) + "\n\n"
+        if !pendingNotes.isEmpty {
+            text += "OPEN (\(pendingNotes.count))\n"
+            for n in pendingNotes {
+                let icon = n.priority == "high" ? "🔴" : "🔵"
+                text += "\(icon) \(n.title)\n"
+                if let b = n.body, !b.isEmpty { text += "   \(b)\n" }
+            }
+        }
+        if !doneNotes.isEmpty {
+            text += "\nCOMPLETED (\(doneNotes.count))\n"
+            for n in doneNotes { text += "✅ \(n.title)\n" }
+        }
+        return text
+    }
+
+    func sendEmail() async {
+        isSendingEmail = true
+        do {
+            try await APIClient.shared.shareNotes(toEmail: emailAddress)
+            emailResult = "Sent to \(emailAddress)"
+        } catch {
+            emailResult = error.localizedDescription
+        }
+        isSendingEmail = false
+    }
+}
+
+// MARK: - Share Sheet wrapper
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Note Row
