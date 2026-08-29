@@ -3,9 +3,11 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject var auth: AuthManager
     @EnvironmentObject var queue: UploadQueueManager
+    @ObservedObject var network = NetworkMonitor.shared
     @State private var selectedTab = 1  // To-Do active on login
 
     var body: some View {
+        ZStack(alignment: .top) {
         TabView(selection: $selectedTab) {
             DashboardView()
                 .tabItem { Label("Dashboard", systemImage: "chart.pie.fill") }
@@ -34,5 +36,12 @@ struct MainTabView: View {
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
                 .tag(5)
         }
+        // Offline banner floats above all tabs
+        VStack {
+            OfflineBanner()
+            Spacer()
+        }
+        .animation(.easeInOut(duration: 0.3), value: network.isConnected)
+        } // end ZStack
     }
 }

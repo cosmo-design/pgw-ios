@@ -12,9 +12,12 @@ struct UploadView: View {
     @State private var loadingFolders = false
     @State private var folderError = ""
     @State private var selectedClient = "PGW"
+    @State private var taxYear = 2026
     let clients = ["PGW", "JGarcia"]
-    // Dropbox root paths for each client (must match actual Dropbox folder names)
-    let clientRoots = ["PGW": "/PGW", "JGarcia": "/JGarcia"]
+    let availableYears = [2025, 2026]
+
+    /// Dropbox base path for the selected client + year, e.g. /PGW/2026
+    var currentBase: String { "/\(selectedClient)/\(taxYear)" }
 
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
@@ -24,6 +27,8 @@ struct UploadView: View {
     @State private var isUploading = false
     @State private var uploadMessage = ""
     @State private var uploadSuccess = false
+    @State private var duplicateWarning: DuplicateWarning?
+    @State private var pendingForceImage: (UIImage, String)?   // image + fileName to re-upload forced
 
     @State private var showNewFolderSheet = false
     @State private var newFolderName = ""
@@ -33,8 +38,28 @@ struct UploadView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // MARK: Client Picker
+                // MARK: Client + Year Header
                 Section {
+                    // Year badge — prominent
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Tax Year").font(.caption).foregroundStyle(.secondary)
+                            Text(String(taxYear))
+                                .font(.title2).bold().foregroundStyle(.blue)
+                        }
+                        Spacer()
+                        Picker("Year", selection: $taxYear) {
+                            ForEach(availableYears, id: \.self) { Text(String($0)) }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 130)
+                        .onChange(of: taxYear) { _, _ in
+                            selectedFolder = nil
+                            Task { await loadFolders() }
+                        }
+                    }
+                    .padding(.vertical, 4)
+
                     Picker("Client", selection: $selectedClient) {
                         ForEach(clients, id: \.self) { Text($0) }
                     }
@@ -43,8 +68,12 @@ struct UploadView: View {
                         selectedFolder = nil
                         Task { await loadFolders() }
                     }
+
+                    // Show resolved Dropbox path
+                    Text("Uploading to: \(currentBase)")
+                        .font(.caption).foregroundStyle(.secondary)
                 } header: {
-                    Text("Client")
+                    Text("Upload Destination")
                 }
 
                 // MARK: Folder Picker
@@ -239,6 +268,24 @@ struct UploadView: View {
             }
             .task { await loadFolders() }
             .refreshable { await loadFolders() }
+            .alert(
+                "Possible Duplicate",
+                isPresented: Binding(get: { duplicateWarning != nil }, set: { if !$0 { duplicateWarning = nil } }),
+                presenting: duplicateWarning
+            ) { warning in
+                Button("Upload Anyway", role: .destructive) {
+                    if let (img, name) = pendingForceImage {
+                        Task { await forceUpload(image: img, fileName: name) }
+                    }
+                    duplicateWarning = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    duplicateWarning = nil
+                    pendingForceImage = nil
+                }
+            } message: { warning in
+                Text(warning.message)
+            }
         }
     }
 
@@ -284,11 +331,14 @@ struct UploadView: View {
     private func loadFolders() async {
         loadingFolders = true
         folderError = ""
-        let base = clientRoots[selectedClient] ?? "/\(selectedClient)"
         do {
-            let response = try await APIClient.shared.getFolders(base: base)
+            let response = try await APIClient.shared.getFolders(base: currentBase)
             folders = response.folders
             baseFolder = response.baseFolder
+            // Auto-select the root year folder so user can upload without picking a subfolder
+            if selectedFolder == nil {
+                selectedFolder = Folder(name: "(\(taxYear) root)", path: currentBase, depth: 0)
+            }
         } catch {
             folderError = error.localizedDescription
         }
@@ -326,8 +376,13 @@ struct UploadView: View {
                     folderPath: folder.path
                 )
                 successCount += 1
+            } catch APIError.duplicateWarning(let warning) {
+                // Pause and let the user decide — store pending image for forced re-upload
+                pendingForceImage = (image, fileName)
+                duplicateWarning = warning
+                isUploading = false
+                return  // Stop the batch; user can re-upload remaining after deciding
             } catch {
-                // Queue for later if offline
                 let pending = PendingUpload(imageData: data, folderPath: folder.path, folderName: folder.name)
                 queue.enqueue(pending)
             }
@@ -346,6 +401,28 @@ struct UploadView: View {
             uploadSuccess = false
             uploadMessage += " \(queued) queued for retry when online."
         }
+    }
+
+    private func forceUpload(image: UIImage, fileName: String) async {
+        guard let folder = selectedFolder,
+              let data = image.jpegData(compressionQuality: 0.85) else { return }
+        isUploading = true
+        do {
+            _ = try await APIClient.shared.uploadReceipt(
+                imageData: data,
+                fileName: fileName,
+                folderPath: folder.path,
+                force: true
+            )
+            uploadSuccess = true
+            uploadMessage = "Receipt uploaded (duplicate override)."
+            selectedImages.removeAll { $0 === image }
+        } catch {
+            uploadSuccess = false
+            uploadMessage = error.localizedDescription
+        }
+        pendingForceImage = nil
+        isUploading = false
     }
 
     private func createFolder() async {

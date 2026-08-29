@@ -2,16 +2,28 @@ import Foundation
 import UIKit
 
 // MARK: - API errors
+struct DuplicateWarning {
+    let vendor: String
+    let amount: Double
+    let date: String
+    let transactionId: Int
+    var message: String {
+        "A receipt for \(vendor) · $\(String(format: "%.2f", amount)) on \(date) may already be uploaded. Upload anyway?"
+    }
+}
+
 enum APIError: LocalizedError {
     case invalidURL, notAuthenticated, decodingError
     case serverError(String)
+    case duplicateWarning(DuplicateWarning)
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL:          return "Invalid URL"
-        case .notAuthenticated:    return "Not logged in"
-        case .decodingError:       return "Unexpected server response"
-        case .serverError(let m):  return m
+        case .invalidURL:              return "Invalid URL"
+        case .notAuthenticated:        return "Not logged in"
+        case .decodingError:           return "Unexpected server response"
+        case .serverError(let m):      return m
+        case .duplicateWarning(let w): return w.message
         }
     }
 }
@@ -170,16 +182,30 @@ class APIClient {
         throw APIError.decodingError
     }
 
-    func uploadReceipt(imageData: Data, fileName: String, folderPath: String) async throws -> UploadResult {
+    func uploadReceipt(imageData: Data, fileName: String, folderPath: String, force: Bool = false) async throws -> UploadResult {
         let url = try url("/api/uploads/receipt")
         let boundary = "Boundary-\(UUID().uuidString)"
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        req.httpBody = buildMultipart(boundary: boundary, imageData: imageData, fileName: fileName, folderPath: folderPath)
+        req.httpBody = buildMultipart(boundary: boundary, imageData: imageData, fileName: fileName, folderPath: folderPath, force: force)
         let (data, resp) = try await session.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw APIError.serverError("No response") }
-        if http.statusCode == 409 { throw APIError.serverError("Duplicate receipt — already uploaded") }
+        if http.statusCode == 409 {
+            // Check if it's a fuzzy duplicate (overridable) or exact hash duplicate (hard block)
+            if let detail = try? JSONDecoder().decode([String: AnyCodable].self, from: data),
+               let d = detail["detail"] {
+                if let dict = d.value as? [String: Any],
+                   let dupType = dict["duplicate_type"] as? String, dupType == "fuzzy",
+                   let vendor = dict["matching_vendor"] as? String,
+                   let amount = dict["matching_amount"] as? Double,
+                   let date = dict["matching_date"] as? String,
+                   let txnId = dict["matching_transaction_id"] as? Int {
+                    throw APIError.duplicateWarning(DuplicateWarning(vendor: vendor, amount: amount, date: date, transactionId: txnId))
+                }
+            }
+            throw APIError.serverError("Duplicate receipt — already uploaded")
+        }
         if http.statusCode != 200 { throw serverError(data, fallback: "Upload failed") }
         return try decode(data)
     }
@@ -203,10 +229,18 @@ class APIClient {
 
     private func decode<T: Decodable>(_ data: Data) throws -> T {
         let decoder = JSONDecoder()
-        guard let result = try? decoder.decode(T.self, from: data) else {
-            throw APIError.decodingError
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            // Show actual server message if available (e.g. 401 {"detail":"Not authenticated"})
+            if let dict = try? JSONDecoder().decode([String: String].self, from: data),
+               let detail = dict["detail"] {
+                throw APIError.serverError(detail)
+            }
+            // Otherwise show raw response (first 300 chars) for debugging
+            let raw = String(data: data, encoding: .utf8)?.prefix(300) ?? "unreadable"
+            throw APIError.serverError("Decode error: \(raw)")
         }
-        return result
     }
 
     private func serverError(_ data: Data, fallback: String) -> APIError {
@@ -214,23 +248,24 @@ class APIClient {
         return .serverError(msg)
     }
 
-    private func buildMultipart(boundary: String, imageData: Data, fileName: String, folderPath: String) -> Data {
+    private func buildMultipart(boundary: String, imageData: Data, fileName: String, folderPath: String, force: Bool = false) -> Data {
         var body = Data()
         let crlf = "\r\n"
         func a(_ s: String) { body.append(s.data(using: .utf8)!) }
+        func field(_ name: String, _ value: String) {
+            a("--\(boundary)\(crlf)")
+            a("Content-Disposition: form-data; name=\"\(name)\"\(crlf)\(crlf)")
+            a(value)
+            a(crlf)
+        }
         a("--\(boundary)\(crlf)")
         a("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\(crlf)")
         a("Content-Type: image/jpeg\(crlf)\(crlf)")
         body.append(imageData)
         a(crlf)
-        a("--\(boundary)\(crlf)")
-        a("Content-Disposition: form-data; name=\"dropbox_folder\"\(crlf)\(crlf)")
-        a(folderPath)
-        a(crlf)
-        a("--\(boundary)\(crlf)")
-        a("Content-Disposition: form-data; name=\"tax_year\"\(crlf)\(crlf)")
-        a("2026")
-        a(crlf)
+        field("dropbox_folder", folderPath)
+        field("tax_year", "2026")
+        field("force_upload", force ? "true" : "false")
         a("--\(boundary)--\(crlf)")
         return body
     }

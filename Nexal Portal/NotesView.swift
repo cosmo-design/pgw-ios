@@ -53,7 +53,15 @@ struct NotesView: View {
             .navigationTitle("To-Do List")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showAdd = true } label: { Image(systemName: "plus") }
+                    HStack(spacing: 16) {
+                        Button {
+                            PrintHelper.printNotes(notes: notes)
+                        } label: {
+                            Image(systemName: "printer")
+                        }
+                        .disabled(notes.isEmpty)
+                        Button { showAdd = true } label: { Image(systemName: "plus") }
+                    }
                 }
             }
             .task { await load() }

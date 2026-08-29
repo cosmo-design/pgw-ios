@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var auth: AuthManager
+    @ObservedObject var network = NetworkMonitor.shared
 
     @State private var email = ""
     @State private var password = ""
@@ -9,7 +10,7 @@ struct LoginView: View {
     @State private var errorMessage = ""
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             Color(.systemGroupedBackground).ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -110,6 +111,13 @@ struct LoginView: View {
                 }
                 .padding(.horizontal, 24)
 
+                Spacer()
+            }
+
+            // Offline banner floats at top
+            VStack {
+                OfflineBanner()
+                    .animation(.easeInOut(duration: 0.3), value: network.isConnected)
                 Spacer()
             }
         }

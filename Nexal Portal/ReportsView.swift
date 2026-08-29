@@ -63,7 +63,15 @@ struct ReportsView: View {
                     .onChange(of: taxYear) { _, _ in Task { await load() } }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    PrivacyBadge()
+                    HStack(spacing: 16) {
+                        Button {
+                            PrintHelper.printReports(taxReport: taxReport, propertyReport: propertyReport, taxYear: taxYear, isPrivate: privacy.isPrivate)
+                        } label: {
+                            Image(systemName: "printer")
+                        }
+                        .disabled(taxReport == nil && propertyReport == nil)
+                        PrivacyBadge()
+                    }
                 }
             }
             .task { await load() }
